@@ -143,7 +143,7 @@ class FactoryPipeline:
             advance(PipelineState.GENERATING)
             attempt_assets: list[MediaAsset] = []
             for shot in shots:
-                estimate = self.provider.estimated_cost
+                estimate = self.provider.estimate_cost(shot)
                 self.budget.authorize(estimate, video_spend, self.ledger.daily_spend())
                 job_id = (uuid5(NAMESPACE_URL, f"{idempotency_key}:job:{attempt}:{shot.id}")
                           if idempotency_key else uuid4())
