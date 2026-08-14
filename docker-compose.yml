@@ -1,0 +1,10 @@
+services:
+  postgres:
+    image: postgres:16.4-alpine
+    environment:
+      POSTGRES_USER: factory
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-development-only}
+      POSTGRES_DB: factory
+    ports: ["5432:5432"]
+    volumes: ["factory_db:/var/lib/postgresql/data"]
+volumes: {factory_db: {}}
