@@ -18,3 +18,9 @@ def test_all_public_tables_enable_rls_without_permissive_policy():
  for table in tables:
   assert f'alter table public.{table} enable row level security' in sql
  assert 'using (true)' not in sql
+
+
+def test_additive_idempotency_migration():
+ path=Path('supabase/migrations/0003_add_pipeline_idempotency.sql')
+ sql=path.read_text().lower()
+ assert 'correlation_id' in sql and 'unique index' in sql

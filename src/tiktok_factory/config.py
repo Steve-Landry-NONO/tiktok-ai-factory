@@ -14,3 +14,14 @@ class Settings(BaseSettings):
     output_dir: Path = Path("output")
     ffmpeg_binary: str = "ffmpeg"
     ffprobe_binary: str = "ffprobe"
+    llm_provider: str = "groq"
+    video_provider: str = "synthetic"
+    groq_api_key: str | None = None
+    runway_api_key: str | None = None
+    supabase_url: str | None = None
+    supabase_secret_key: str | None = None
+    groq_primary_model: str = "openai/gpt-oss-120b"
+    groq_judge_model: str = "openai/gpt-oss-20b"
+    runway_model: str = "gen4.5"
+    runway_ratio: str = "720:1280"
+    runway_credits_per_second: float = Field(12.0, ge=0)

@@ -96,9 +96,9 @@ def test_daily_budget_blocks_before_provider_call(tmp_path):
     assert provider.calls == 0
 
 
-def test_per_video_budget_blocks_before_next_generation(tmp_path):
+def test_per_video_budget_preflights_whole_attempt_before_any_generation(tmp_path):
     provider = FakeVideoProvider(cost=1.0)
     factory = pipeline(provider, [90], budget=BudgetPolicy(2, 100))
     with pytest.raises(BudgetExceededError):
         factory.run(IDEA, tmp_path)
-    assert provider.calls == 2
+    assert provider.calls == 0

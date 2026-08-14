@@ -22,3 +22,18 @@ ratio, durée, fps, audio configurable et corruption.
 ## Données et orchestration
 
 La migration relie source/idea/script/storyboard/shots/jobs/assets/video/QA/publication/metrics. JSONB est limité aux sorties structurées, contrôles et diagnostics. Les templates n8n déclenchent et appellent une future API `FACTORY_API_URL`; ils ne copient pas les règles métier. En production : workers idempotents, file d'attente, webhooks providers, stockage objet et transactions de statut.
+
+## V2 intelligent orchestration
+
+`IntelligentPipeline` calls Director and Creative Producer with the primary model, then
+four independent judges with the judge model. Every call uses a strict Pydantic JSON
+schema and is captured as a non-secret `AgentRun`. Groq is behind a structured-provider
+protocol, so an OpenAI adapter can be selected later without changing orchestration.
+Bounded exponential backoff applies only to network, 429 and server failures; 401 is
+permanent.
+
+The Supabase REST repository uses only a server secret, upserts deterministic genealogy
+IDs, and verifies the idea with a read-after-write. A stable correlation ID derives the
+idea, script, storyboard, shot, job, asset, video and QA IDs, making n8n replays
+convergent. The original migration remains immutable; V2 schema changes are in 0002 and
+0003.
