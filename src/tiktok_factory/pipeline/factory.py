@@ -140,13 +140,18 @@ class FactoryPipeline:
 
         while True:
             attempt += 1
+            attempt_estimate = sum(self.provider.estimate_cost(shot) for shot in shots)
+            self.budget.authorize(attempt_estimate, video_spend, self.ledger.daily_spend())
             advance(PipelineState.GENERATING)
             attempt_assets: list[MediaAsset] = []
             for shot in shots:
                 estimate = self.provider.estimate_cost(shot)
                 self.budget.authorize(estimate, video_spend, self.ledger.daily_spend())
-                job_id = (uuid5(NAMESPACE_URL, f"{idempotency_key}:job:{attempt}:{shot.id}")
-                          if idempotency_key else uuid4())
+                job_id = (
+                    uuid5(NAMESPACE_URL, f"{idempotency_key}:job:{attempt}:{shot.id}")
+                    if idempotency_key
+                    else uuid4()
+                )
                 job = GenerationJob(
                     id=job_id,
                     shot_id=shot.id,
@@ -157,7 +162,8 @@ class FactoryPipeline:
                     status=PipelineState.GENERATING,
                 )
                 path = self.provider.generate(
-                    shot, output_dir / "clips" / f"attempt_{attempt}" / f"shot_{shot.number}.mp4"
+                    shot,
+                    output_dir / "clips" / f"attempt_{attempt}" / f"shot_{shot.number}.mp4",
                 )
                 job.actual_cost = estimate
                 job.status = PipelineState.RENDER_PENDING
@@ -166,18 +172,25 @@ class FactoryPipeline:
                 self.ledger.record(estimate)
                 info = self.probe_fn(path)
                 duration = float(info["format"]["duration"])
-                asset_id = (uuid5(NAMESPACE_URL, f"{idempotency_key}:asset:{attempt}:{shot.id}")
-                            if idempotency_key else uuid4())
-                attempt_assets.append(MediaAsset(id=asset_id,
-                    job_id=job.id, path=path, duration_seconds=duration))
+                asset_id = (
+                    uuid5(NAMESPACE_URL, f"{idempotency_key}:asset:{attempt}:{shot.id}")
+                    if idempotency_key
+                    else uuid4()
+                )
+                attempt_assets.append(
+                    MediaAsset(id=asset_id, job_id=job.id, path=path, duration_seconds=duration)
+                )
 
             advance(PipelineState.RENDER_PENDING)
             advance(PipelineState.RENDERING)
             final_path = self.renderer.render(
                 [asset.path for asset in attempt_assets], output_dir / "final.mp4", script.hook
             )
-            video_id = (uuid5(NAMESPACE_URL, f"{idempotency_key}:video:{attempt}")
-                        if idempotency_key else uuid4())
+            video_id = (
+                uuid5(NAMESPACE_URL, f"{idempotency_key}:video:{attempt}")
+                if idempotency_key
+                else uuid4()
+            )
             video = Video(id=video_id, storyboard_id=board.id, path=final_path)
             advance(PipelineState.QA_PENDING)
             technical = self.technical_reviewer(video, final_path)
@@ -223,5 +236,7 @@ class FactoryPipeline:
             state_history=history,
             metadata_path=metadata_path,
         )
-        metadata_path.write_text(json.dumps(result.model_dump(mode="json"), indent=2), encoding="utf-8")
+        metadata_path.write_text(
+            json.dumps(result.model_dump(mode="json"), indent=2), encoding="utf-8"
+        )
         return result
