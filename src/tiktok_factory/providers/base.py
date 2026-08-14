@@ -47,6 +47,13 @@ class StorageProvider(ABC):
     def put(self, source: Path, key: str) -> Path: ...
 
 
+class TextToSpeechProvider(ABC):
+    """Turns narration into a local audio file."""
+
+    @abstractmethod
+    def synthesize(self, text: str, destination: Path) -> Path: ...
+
+
 class AnalyticsProvider(ABC):
     @abstractmethod
     def metrics(self, publication_id: UUID) -> PerformanceMetric: ...

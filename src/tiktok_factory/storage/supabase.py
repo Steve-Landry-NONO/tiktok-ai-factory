@@ -60,6 +60,36 @@ class SupabaseRepository:
         rows = response.json()
         return isinstance(rows, list) and any(isinstance(row, dict) and row.get("id") == idea_id for row in rows)
 
+    def load_rerender_metadata(self, idea_id: str) -> dict[str, Any]:
+        """Load genealogy only; storage keys are not physical media downloads."""
+        def rows(table: str, query: str) -> list[dict[str, Any]]:
+            response = self._request("GET", f"/rest/v1/{table}?{query}")
+            value = response.json()
+            if not isinstance(value, list):
+                raise SupabaseRepositoryError(f"invalid {table} metadata response")
+            return [row for row in value if isinstance(row, dict)]
+
+        ideas = rows("content_ideas", f"id=eq.{idea_id}&select=*")
+        scripts = rows("scripts", f"idea_id=eq.{idea_id}&select=*")
+        if not ideas or not scripts:
+            raise SupabaseRepositoryError(f"no rerender metadata for idea {idea_id}")
+        script = scripts[0]
+        boards = rows("storyboards", f"script_id=eq.{script['id']}&select=*")
+        if not boards:
+            raise SupabaseRepositoryError(f"no storyboard metadata for idea {idea_id}")
+        shots = rows("storyboard_shots", f"storyboard_id=eq.{boards[0]['id']}&select=*")
+        shot_ids = [str(shot["id"]) for shot in shots if "id" in shot]
+        jobs: list[dict[str, Any]] = []
+        for shot_id in shot_ids:
+            jobs.extend(rows("generation_jobs", f"shot_id=eq.{shot_id}&select=*"))
+        assets: list[dict[str, Any]] = []
+        for job in jobs:
+            assets.extend(rows("media_assets", f"job_id=eq.{job['id']}&select=*"))
+        if not assets:
+            raise SupabaseRepositoryError(f"no media asset metadata for idea {idea_id}")
+        return {"idea": ideas[0], "script": script, "storyboard": boards[0],
+                "shots": shots, "jobs": jobs, "assets": assets}
+
     def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         for attempt in range(self.max_retries + 1):
             try: response = self._client.request(method, path, headers=self._headers, **kwargs)

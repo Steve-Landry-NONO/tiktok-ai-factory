@@ -6,12 +6,19 @@ from uuid import uuid4
 
 from tiktok_factory.pipeline.factory import FactoryPipeline
 from tiktok_factory.pipeline.intelligent import IntelligentPipeline, MockIntelligentLLM
+from tiktok_factory.pipeline.rerender import ExistingClipsRerenderer
 from tiktok_factory.pipeline.policies import BudgetPolicy
 from tiktok_factory.providers.base import VideoGenerationProvider
 from tiktok_factory.providers.groq import GroqProvider
+from tiktok_factory.providers.groq_tts import (
+    DEFAULT_ORPHEUS_VOICE,
+    ORPHEUS_ENGLISH_MODEL,
+    GroqTextToSpeech,
+)
 from tiktok_factory.providers.local import SyntheticVideoProvider
 from tiktok_factory.providers.runway import RunwayProvider
-from tiktok_factory.qa import review_technical
+from tiktok_factory.pipeline.renderer import probe
+from tiktok_factory.qa import review_audio_probe, review_technical
 from tiktok_factory.storage.supabase import SupabaseRepository
 
 LIVE_REQUIRED = ("GROQ_API_KEY", "SUPABASE_URL", "SUPABASE_SECRET_KEY")
@@ -87,7 +94,69 @@ def main() -> int:
         default="A futuristic city where gravity reverses for exactly one minute every midnight",
     )
     intelligent.add_argument("--correlation-id")
+    rerender = commands.add_parser(
+        "rerender-existing",
+        help="render local, already-generated clips; never calls Runway or downloads media",
+    )
+    rerender_source = rerender.add_mutually_exclusive_group(required=True)
+    rerender_source.add_argument("--idea-id")
+    rerender_source.add_argument("--metadata", type=Path)
+    rerender.add_argument("--input-dir", type=Path)
+    rerender.add_argument("--output", required=True, type=Path)
+    qa_video = commands.add_parser("qa-video")
+    qa_video.add_argument("--video", required=True, type=Path)
     args = parser.parse_args()
+
+    if args.command == "rerender-existing":
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            print("error: rerender narration requires GROQ_API_KEY")
+            return 2
+        try:
+            metadata_path = args.metadata
+            if args.idea_id:
+                if not os.getenv("SUPABASE_URL") or not os.getenv("SUPABASE_SECRET_KEY"):
+                    raise RuntimeError("--idea-id requires SUPABASE_URL and SUPABASE_SECRET_KEY for metadata")
+                repository = SupabaseRepository(
+                    os.environ["SUPABASE_URL"], os.environ["SUPABASE_SECRET_KEY"]
+                )
+                args.output.mkdir(parents=True, exist_ok=True)
+                metadata_path = args.output / "source-metadata.json"
+                metadata_path.write_text(
+                    json.dumps(repository.load_rerender_metadata(args.idea_id), indent=2),
+                    encoding="utf-8",
+                )
+            assert metadata_path is not None
+            input_dir = args.input_dir or Path(os.getenv("MEDIA_INPUT_DIR", "."))
+            rerender_result = ExistingClipsRerenderer(GroqTextToSpeech(
+                api_key,
+                model=os.getenv("GROQ_TTS_MODEL", ORPHEUS_ENGLISH_MODEL),
+                voice=os.getenv("GROQ_TTS_VOICE", DEFAULT_ORPHEUS_VOICE),
+            )).run(input_dir, metadata_path, args.output)
+        except (OSError, RuntimeError, ValueError) as exc:
+            print(f"error: {exc}")
+            return 2
+        print(json.dumps({
+            "status": "READY_TO_PUBLISH",
+            "video": str(rerender_result.video),
+            "metadata": str(rerender_result.metadata),
+            "clips": [str(path) for path in rerender_result.clips],
+        }))
+        return 0
+
+    if args.command == "qa-video":
+        video_id = uuid4()
+        technical_review = review_technical(video_id, args.video, require_audio=True)
+        try:
+            audio_review = review_audio_probe(video_id, probe(args.video), require_audio=True)
+        except RuntimeError:
+            audio_review = None
+        print(json.dumps({
+            "technical": technical_review.model_dump(mode="json"),
+            "audio": audio_review.model_dump(mode="json") if audio_review else None,
+        }, indent=2))
+        passed = technical_review.outcome == "PASS" and audio_review is not None and audio_review.outcome == "PASS"
+        return 0 if passed else 1
 
     if args.command in ("generate", "demo"):
         idea = args.idea if args.command == "generate" else "A city where gravity changes every midnight"

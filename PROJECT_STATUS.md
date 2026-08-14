@@ -1,5 +1,12 @@
 # Project status
 
+## IMPLEMENTED — V3.1 POST-PRODUCTION
+- `rerender-existing` post-produit uniquement des médias déjà matérialisés localement.
+- Pillow produit des cartouches responsive, Groq TTS la narration et FFmpeg du H.264/AAC.
+- Les QA texte, audio et technique sont inscrites dans le manifeste avec `runway_calls: 0`.
+- Supabase REST fournit uniquement la généalogie et les storage keys, jamais implicitement
+  les octets : ceux-ci doivent venir d'un artefact extrait ou d'un backend objet futur.
+
 ## DONE — V2 LIVE VALIDATED
 - V1 typed scoring, bounded retry/budget, synthetic provider, FFmpeg renderer and QA.
 - V2 Director, Creative Producer and four independent structured judges.

@@ -79,6 +79,32 @@ La QA technique inspecte réellement le MP4. La QA créative actuelle reste un p
 test déterministe et devra être remplacée par une revue visuelle IA avant l'automatisation
 sans supervision.
 
+## V3.1 — rerender d'un artefact existant
+
+Les `storage_key` de `media_assets` dans Supabase sont des **métadonnées**. En particulier,
+un chemin tel que `output/runway_live/clips/attempt_1/shot_1.mp4` désigne l'ancien
+filesystem éphémère du runner et ne prouve pas que les octets sont dans Supabase Storage.
+Il faut d'abord télécharger et extraire l'artefact GitHub Actions, puis fournir son
+répertoire local :
+
+```bash
+python -m tiktok_factory.cli rerender-existing \
+  --idea-id c2ef9479-208c-5ad7-8421-12aabc53704b \
+  --input-dir output/downloaded-artifact \
+  --output output/rerender-v3.1
+```
+
+Cette commande découvre les MP4 locaux, produit la narration avec Groq TTS, applique
+l'overlay, exécute FFmpeg et écrit `final.mp4` ainsi qu'un manifeste de QA. Elle ne crée
+aucun clip et n'appelle jamais Runway. `GROQ_API_KEY` est requis à l'exécution, mais les
+tests utilisent un faux TTS et n'ont besoin d'aucun secret. Les backends physiques
+`MediaStorage` sont séparés de `SupabaseRepository`; le filesystem est disponible et les
+adaptateurs Supabase Storage/GitHub artifact sont des points d'extension explicites.
+`--idea-id` charge seulement la généalogie Supabase et exige donc les variables Supabase;
+les MP4 doivent toujours être présents sous `--input-dir` (ou `MEDIA_INPUT_DIR`). Le mode
+offline accepte à la place `--metadata`. La QA autonome s'exécute avec
+`python -m tiktok_factory.cli qa-video --video output/rerender-v3.1/final.mp4`.
+
 ## Configuration et suite
 
 Toutes les variables reconnues sont documentées dans `.env.example`. Les secrets doivent
