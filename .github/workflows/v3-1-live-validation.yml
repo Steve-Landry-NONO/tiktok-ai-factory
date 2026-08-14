@@ -127,21 +127,24 @@ jobs:
           PY
 
       - name: Standalone audio and technical QA
+        if: ${{ always() && hashFiles('output/v3_1_live/final.mp4') != '' }}
         run: python -m tiktok_factory.cli qa-video --video output/v3_1_live/final.mp4
 
       - name: Inspect final MP4
+        if: ${{ always() && hashFiles('output/v3_1_live/final.mp4') != '' }}
         shell: bash
         run: |
           set -euo pipefail
           test -s output/v3_1_live/final.mp4
           ffprobe \
             -v error \
-            -show_entries stream=index,codec_name,codec_type,width,height,avg_frame_rate \
-            -show_entries format=duration,size \
+            -show_entries stream=index,codec_name,codec_type,width,height,avg_frame_rate,start_time,duration \
+            -show_entries format=start_time,duration,size \
             -of json \
             output/v3_1_live/final.mp4 | tee output/v3_1_live/ffprobe.json
 
       - name: Extract visual QA frames
+        if: ${{ always() && hashFiles('output/v3_1_live/final.mp4') != '' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -152,9 +155,10 @@ jobs:
           test -s output/v3_1_live/frames/cta.png
 
       - name: Upload V3.1 validation artifacts
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: v3-1-live-${{ github.run_id }}
+          name: v3-1-live-${{ github.run_id }}-attempt-${{ github.run_attempt }}
           path: |
             output/v3_1_live/final.mp4
             output/v3_1_live/metadata.json
@@ -162,5 +166,5 @@ jobs:
             output/v3_1_live/audio/**
             output/v3_1_live/overlays/**
             output/v3_1_live/frames/**
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 7
