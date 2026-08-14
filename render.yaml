@@ -16,3 +16,5 @@ services:
         value: info
       - key: FACTORY_OUTPUT_ROOT
         value: /app/output/api
+      - key: FACTORY_API_LIGHTWEIGHT_MOCK
+        value: "1"

@@ -1,5 +1,8 @@
+import json
 from pathlib import Path
 from typing import Any
+
+import pytest
 
 from tiktok_factory.api.service import FactoryOrchestrationService, RunRequest, RunResponse
 
@@ -64,3 +67,39 @@ def test_duplicate_correlation_id_replays_without_rerunning(tmp_path: Path) -> N
     assert first.replayed is False
     assert second.replayed is True
     assert second.final_video == first.final_video
+
+
+def test_lightweight_mock_avoids_pipeline_and_paid_providers(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("FACTORY_API_LIGHTWEIGHT_MOCK", "1")
+
+    def fail_if_pipeline_is_built(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("full media pipeline must not run in lightweight mock mode")
+
+    monkeypatch.setattr(
+        "tiktok_factory.api.service.build_intelligent_pipeline",
+        fail_if_pipeline_is_built,
+    )
+
+    service = FactoryOrchestrationService(output_root=tmp_path)
+    response = service.run(
+        RunRequest(
+            idea="A safe futuristic city concept",
+            correlation_id="n8n-mock-123",
+            mode="mock",
+            video_provider="synthetic",
+            postprocess=False,
+        )
+    )
+
+    assert response.status == "MOCK_OK"
+    assert response.video_provider == "synthetic"
+    assert response.estimated_generation_cost_usd == 0.0
+    assert response.final_video is None
+    assert response.generation_metadata is not None
+
+    metadata = json.loads(Path(response.generation_metadata).read_text(encoding="utf-8"))
+    assert metadata["paid_provider_calls"] == 0
+    assert metadata["ffmpeg_calls"] == 0

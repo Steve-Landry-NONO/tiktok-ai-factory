@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Callable
 from pathlib import Path
@@ -137,9 +138,53 @@ class FactoryOrchestrationService:
         )
 
 
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _run_lightweight_mock(request: RunRequest, output_dir: Path) -> RunResponse:
+    """Validate the remote control plane without invoking FFmpeg or paid providers."""
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    metadata_path = output_dir / "mock-control-plane.json"
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "correlation_id": request.correlation_id,
+                "idea": request.idea,
+                "mode": request.mode,
+                "video_provider": request.video_provider,
+                "postprocess": request.postprocess,
+                "status": "MOCK_OK",
+                "paid_provider_calls": 0,
+                "ffmpeg_calls": 0,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    return RunResponse(
+        correlation_id=request.correlation_id,
+        status="MOCK_OK",
+        video_provider=request.video_provider,
+        estimated_generation_cost_usd=0.0,
+        generation_metadata=str(metadata_path),
+    )
+
+
 def _run_pipeline(request: RunRequest, output_dir: Path) -> RunResponse:
     if request.video_provider == "runway" and request.mode != "live":
         raise ValueError("Runway is available only in live mode")
+
+    if (
+        request.mode == "mock"
+        and request.video_provider == "synthetic"
+        and _env_flag("FACTORY_API_LIGHTWEIGHT_MOCK")
+    ):
+        return _run_lightweight_mock(request, output_dir)
 
     pipeline = build_intelligent_pipeline(request.mode, request.video_provider)
     result = pipeline.run(request.idea, output_dir, request.correlation_id)
