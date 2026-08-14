@@ -42,6 +42,28 @@ def test_render_with_normalized_aac_audio(tmp_path):
     assert float(data["format"]["duration"]) > 0
 
 
+def test_render_paces_long_audio_and_caps_container_duration(tmp_path):
+    require_tool("ffmpeg")
+    clip = SyntheticVideoProvider().generate(
+        StoryboardShot(number=1, concept="paced", duration_seconds=1.0), tmp_path / "clip.mp4"
+    )
+    audio = tmp_path / "long-tone.wav"
+    subprocess.run([
+        "ffmpeg", "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=1.2", str(audio)
+    ], check=True, capture_output=True)
+    final = FFmpegRenderer().render(
+        [clip], tmp_path / "paced.mp4", "", audio, True, None,
+        audio_tempo=1.2 / 0.9, target_duration=1.0,
+    )
+    data = probe(final)
+    video = video_stream(data)
+    audio_stream = next(stream for stream in data["streams"] if stream["codec_type"] == "audio")
+    video_duration = float(video.get("duration", data["format"]["duration"]))
+    audio_duration = float(audio_stream.get("duration", data["format"]["duration"]))
+    assert float(data["format"]["duration"]) <= 1.05
+    assert abs(audio_duration - video_duration) <= 0.1
+
+
 def eval_fraction(value: str) -> float:
     numerator, denominator = value.split("/")
     return float(numerator) / float(denominator)
