@@ -14,7 +14,12 @@ class LLMProvider(ABC):
 class VideoGenerationProvider(ABC):
     name: str
     model: str
-    estimated_cost: float
+    estimated_cost: float = 0.0
+
+    def estimate_cost(self, shot: StoryboardShot) -> float:
+        """Return the pre-call USD estimate for one generation."""
+        del shot
+        return self.estimated_cost
 
     @abstractmethod
     def generate(self, shot: StoryboardShot, destination: Path) -> Path: ...
