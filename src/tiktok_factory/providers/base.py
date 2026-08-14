@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from tiktok_factory.domain.models import PerformanceMetric, StoryboardShot
+from tiktok_factory.domain.models import CreativeScores, PerformanceMetric, StoryboardShot, Video
 
 
 class LLMProvider(ABC):
@@ -18,6 +18,23 @@ class VideoGenerationProvider(ABC):
 
     @abstractmethod
     def generate(self, shot: StoryboardShot, destination: Path) -> Path: ...
+
+
+class CreativeQAProvider(ABC):
+    """Scores rendered creative output independently from technical QA."""
+
+    @abstractmethod
+    def evaluate(self, video: Video, attempt: int) -> CreativeScores: ...
+
+
+class CostLedger(ABC):
+    """Tracks already-consumed daily generation cost."""
+
+    @abstractmethod
+    def daily_spend(self) -> float: ...
+
+    @abstractmethod
+    def record(self, amount: float) -> None: ...
 
 
 class StorageProvider(ABC):

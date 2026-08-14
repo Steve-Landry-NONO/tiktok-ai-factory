@@ -4,8 +4,9 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from tiktok_factory.domain.models import PerformanceMetric, StoryboardShot
-from tiktok_factory.providers.base import AnalyticsProvider, LLMProvider, StorageProvider, VideoGenerationProvider
+from tiktok_factory.domain.models import CreativeScores, PerformanceMetric, StoryboardShot, Video
+from tiktok_factory.providers.base import (AnalyticsProvider, CostLedger, CreativeQAProvider,
+    LLMProvider, StorageProvider, VideoGenerationProvider)
 
 
 class ToolUnavailableError(RuntimeError): pass
@@ -57,6 +58,31 @@ class MockAnalyticsProvider(AnalyticsProvider):
     def metrics(self, publication_id: UUID) -> PerformanceMetric:
         return PerformanceMetric(publication_id=publication_id, views=1000, likes=120, comments=15,
             shares=20, average_watch_time=8.4, completion_rate=.72, followers_gained=9)
+
+
+class MockCreativeQAProvider(CreativeQAProvider):
+    """Deterministic QA double; scores may vary by attempt for retry tests."""
+
+    def __init__(self, overall_scores: list[float] | None = None):
+        self.overall_scores = overall_scores or [89.0]
+
+    def evaluate(self, video: Video, attempt: int) -> CreativeScores:
+        del video
+        score = self.overall_scores[min(attempt - 1, len(self.overall_scores) - 1)]
+        return CreativeScores(hook=score, visual_clarity=score, pacing=score, coherence=score,
+            artifact_risk=max(0, 100 - score), subtitle_readability=score,
+            safe_zone_compliance=score, loop_quality=score, overall_score=score)
+
+
+class InMemoryCostLedger(CostLedger):
+    def __init__(self, initial_daily_spend: float = 0.0):
+        self._daily_spend = initial_daily_spend
+
+    def daily_spend(self) -> float:
+        return self._daily_spend
+
+    def record(self, amount: float) -> None:
+        self._daily_spend += amount
 
 
 class OpenAIAdapter(LLMProvider):

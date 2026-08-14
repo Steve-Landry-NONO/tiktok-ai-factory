@@ -31,9 +31,18 @@ class FFmpegRenderer:
     def __init__(self, ffmpeg: str = "ffmpeg", profile: VideoProfile = PROFILE):
         self.ffmpeg, self.profile = ffmpeg, profile
 
-    def command(self, clips: list[Path], destination: Path, hook: str = "") -> list[str]:
+    def command(
+        self,
+        clips: list[Path],
+        destination: Path,
+        hook: str = "",
+        audio_path: Path | None = None,
+        normalize_audio: bool = True,
+    ) -> list[str]:
         if not clips: raise ValueError("at least one clip is required")
         inputs = [item for clip in clips for item in ("-i", str(clip))]
+        if audio_path is not None:
+            inputs.extend(("-i", str(audio_path)))
         filters = []
         for i in range(len(clips)):
             filters.append(f"[{i}:v]scale={self.profile.width}:{self.profile.height}:force_original_aspect_ratio=decrease,"
@@ -46,12 +55,31 @@ class FFmpegRenderer:
             filters.append(f"[vcat]drawtext=text='{safe}':fontcolor=white:fontsize=64:x=(w-text_w)/2:y=180:"
                            "box=1:boxcolor=black@0.6:boxborderw=20[vout]")
             output = "[vout]"
+        audio_options = ["-an"]
+        if audio_path is not None:
+            audio_input = len(clips)
+            audio_output = f"{audio_input}:a:0"
+            if normalize_audio:
+                filters.append(f"[{audio_input}:a]loudnorm=I=-16:LRA=11:TP=-1.5[aout]")
+                audio_output = "[aout]"
+            audio_options = ["-map", audio_output, "-c:a", self.profile.audio_codec, "-b:a", "192k", "-shortest"]
         return [self.ffmpeg, "-y", *inputs, "-filter_complex", ";".join(filters), "-map", output,
                 "-c:v", self.profile.video_codec, "-preset", "veryfast", "-crf", "23", "-movflags", "+faststart",
-                "-pix_fmt", "yuv420p", "-an", str(destination)]
+                "-pix_fmt", "yuv420p", *audio_options, str(destination)]
 
-    def render(self, clips: list[Path], destination: Path, hook: str = "") -> Path:
+    def render(
+        self,
+        clips: list[Path],
+        destination: Path,
+        hook: str = "",
+        audio_path: Path | None = None,
+        normalize_audio: bool = True,
+    ) -> Path:
         require_tool(self.ffmpeg); destination.parent.mkdir(parents=True, exist_ok=True)
-        result = subprocess.run(self.command(clips, destination, hook), capture_output=True, text=True)
+        result = subprocess.run(
+            self.command(clips, destination, hook, audio_path, normalize_audio),
+            capture_output=True,
+            text=True,
+        )
         if result.returncode: raise RuntimeError(f"render failed: {result.stderr[-1500:]}")
         return destination

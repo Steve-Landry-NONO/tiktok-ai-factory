@@ -11,7 +11,9 @@
 
 ## BLOCKED — BLOCKED_EXTERNAL
 - Publication TikTok hors périmètre V1; accès/application TikTok requis.
-- Validation du 14 août 2026 : 23 tests non vidéo passent, ainsi que Ruff et mypy. La
+- Validation du 14 août 2026 : 31 tests non vidéo passent, ainsi que Ruff. Le typage
+  passe avec un stub local de `pydantic-settings`; la commande sans stub reste bloquée
+  par l'impossibilité d'installer les dépendances dans ce sandbox. La
   suite complète reste bloquée exclusivement par l'absence de FFmpeg/ffprobe. Les
   installations `pip` et `apt` ont été retentées, mais le proxy de l'environnement
   refuse les téléchargements avec HTTP 403. La CI installe FFmpeg avant les tests.

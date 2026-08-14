@@ -14,3 +14,19 @@ create table performance_metrics (id uuid primary key default gen_random_uuid(),
 create table experiments (id uuid primary key default gen_random_uuid(), name text not null, cohort text not null, format text, hook_type text, duration_bucket text, creative_family text, publication_time time, created_at timestamptz not null default now());
 create table agent_runs (id uuid primary key default gen_random_uuid(), agent text not null, provider text not null, input jsonb not null, output jsonb not null, created_at timestamptz not null default now());
 create index content_ideas_status_idx on content_ideas(status); create index scripts_idea_idx on scripts(idea_id); create index jobs_shot_idx on generation_jobs(shot_id); create index videos_status_idx on videos(status); create index metrics_publication_idx on performance_metrics(publication_id,measured_at desc); create index agent_runs_agent_idx on agent_runs(agent,created_at desc);
+
+-- Secure-by-default Supabase posture. No anonymous/authenticated policies are
+-- created until the product defines an end-user authorization model. The trusted
+-- backend uses the service_role credential exclusively in a private server context.
+alter table public.content_ideas enable row level security;
+alter table public.scripts enable row level security;
+alter table public.storyboards enable row level security;
+alter table public.storyboard_shots enable row level security;
+alter table public.generation_jobs enable row level security;
+alter table public.media_assets enable row level security;
+alter table public.videos enable row level security;
+alter table public.qa_reviews enable row level security;
+alter table public.publications enable row level security;
+alter table public.performance_metrics enable row level security;
+alter table public.experiments enable row level security;
+alter table public.agent_runs enable row level security;

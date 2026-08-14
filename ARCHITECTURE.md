@@ -10,7 +10,14 @@ Les ports `LLMProvider`, `VideoGenerationProvider`, `StorageProvider`, `Analytic
 
 Le profil `tiktok_vertical_v1` normalise à 1080x1920, 30 fps, H.264/yuv420p. Le générateur produit trois clips gratuits; le renderer les concatène et superpose le hook. L'absence de FFmpeg/ffprobe produit une exception explicite. L'audio est facultatif en V1; le renderer est prêt à évoluer vers une branche audio AAC/loudnorm lorsque narration ou musique existe.
 
-`BudgetPolicy` autorise avant appel selon limites vidéo/journalière. `RetryPolicy` trace les diagnostics et devient `FAILED_PERMANENTLY` après le nombre borné de retries. La QA technique inspecte présence, taille, probe, codec, résolution, ratio, durée, fps, audio configurable et corruption. La QA créative applique PASS ≥85, RETRYABLE 75–84, FAIL <75.
+`BudgetPolicy` autorise avant chaque appel selon les limites vidéo et journalière; un
+`CostLedger` injectable fournit et enregistre la consommation quotidienne.
+`RetryPolicy` pilote réellement la boucle generation/render/QA, conserve les
+diagnostics et devient `FAILED_PERMANENTLY` après le nombre borné de retries. Chaque
+job porte son numéro de tentative. La QA créative est fournie par un
+`CreativeQAProvider` indépendant et injectable; elle applique PASS ≥85, RETRYABLE
+75–84, FAIL <75. La QA technique inspecte présence, taille, probe, codec, résolution,
+ratio, durée, fps, audio configurable et corruption.
 
 ## Données et orchestration
 

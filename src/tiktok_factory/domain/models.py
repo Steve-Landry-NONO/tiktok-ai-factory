@@ -197,4 +197,6 @@ class PipelineResult(StrictModel):
     reviews: list[QAReview]
     status: PipelineState
     attempts: int
+    diagnostics: list[str] = Field(default_factory=list)
+    state_history: list[PipelineState] = Field(default_factory=list)
     metadata_path: Path

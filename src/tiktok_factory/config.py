@@ -1,10 +1,10 @@
 from pathlib import Path
 
 from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict  # type: ignore[import-not-found]
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class Settings(BaseSettings):  # type: ignore[misc]
+class Settings(BaseSettings):
     """Runtime settings; secrets are read only from the environment."""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
