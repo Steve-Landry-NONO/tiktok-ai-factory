@@ -17,14 +17,14 @@ class TrendScoutOutput(StrictModel):
 class CreativeShotOutput(StrictModel):
     concept: str
     caption: str
-    duration_seconds: float = Field(gt=0, le=15)
+    duration_seconds: float = Field(gt=0, le=10)
 
 
 class CreativeProducerOutput(StrictModel):
     hook: str
     narration: str
     call_to_action: str
-    shots: list[CreativeShotOutput] = Field(min_length=1, max_length=8)
+    shots: list[CreativeShotOutput] = Field(min_length=3, max_length=4)
 
 
 class ViralJudgeOutput(StrictModel):
