@@ -1,0 +1,70 @@
+{
+  "name": "00_factory_orchestrator_v4",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "tiktok-factory-v4",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "v4-webhook",
+      "name": "V4 Intake Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.FACTORY_API_URL + '/v1/runs'}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{'Bearer ' + $env.FACTORY_API_TOKEN}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{JSON.stringify($json.body)}}",
+        "options": {
+          "timeout": 3600000
+        }
+      },
+      "id": "factory-api",
+      "name": "Run Factory V4",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        280,
+        0
+      ],
+      "retryOnFail": false
+    }
+  ],
+  "connections": {
+    "V4 Intake Webhook": {
+      "main": [
+        [
+          {
+            "node": "Run Factory V4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "00000000-0000-4000-8000-000000000040"
+}
