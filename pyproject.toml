@@ -4,16 +4,24 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tiktok-ai-factory"
-version = "2.0.0"
+version = "4.0.0"
 description = "Provider-driven intelligent TikTok video factory"
 requires-python = ">=3.11"
-dependencies = ["pydantic==2.11.7", "pydantic-settings==2.10.1", "httpx==0.28.1", "pillow==11.3.0"]
+dependencies = [
+  "pydantic==2.11.7",
+  "pydantic-settings==2.10.1",
+  "httpx==0.28.1",
+  "pillow==11.3.0",
+  "fastapi==0.139.2",
+  "uvicorn==0.51.0",
+]
 
 [project.optional-dependencies]
 dev = ["pytest==8.4.1", "pytest-cov==6.2.1", "ruff==0.12.7", "mypy==1.17.1"]
 
 [project.scripts]
 tiktok-factory = "tiktok_factory.cli.__main__:main"
+tiktok-factory-api = "tiktok_factory.api.app:run"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/tiktok_factory"]
