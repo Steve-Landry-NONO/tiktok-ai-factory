@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: tiktok-ai-factory-api
+    name: tiktok-ai-factory-api-eu
     runtime: docker
     plan: free
     region: frankfurt
