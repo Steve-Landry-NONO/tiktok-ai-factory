@@ -1,0 +1,101 @@
+name: Live V2 Validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to validate"
+        required: true
+        default: "codex/construire-v1-pour-tiktok-ai-factory-kzrrmx"
+      seed:
+        description: "TikTok seed used for the live validation"
+        required: true
+        default: "A futuristic city where gravity reverses for exactly one minute every midnight"
+
+permissions:
+  contents: read
+
+jobs:
+  validate-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Checkout requested ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Validate required configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${GROQ_API_KEY:-}" || { echo "GROQ_API_KEY is missing"; exit 20; }
+          test -n "${SUPABASE_SECRET_KEY:-}" || { echo "SUPABASE_SECRET_KEY is missing"; exit 21; }
+          test -n "${SUPABASE_URL:-}" || { echo "SUPABASE_URL is missing"; exit 22; }
+          echo "Required live configuration is present."
+
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          ffmpeg -version | head -n 1
+          ffprobe -version | head -n 1
+
+      - name: Install project
+        run: python -m pip install -e '.[dev]'
+
+      - name: Ruff
+        run: ruff check .
+
+      - name: Mypy
+        run: mypy
+
+      - name: Test suite
+        run: pytest -q
+
+      - name: Live Groq + Supabase pipeline
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf output/intelligent_live
+          python -m tiktok_factory.cli intelligent-demo \
+            --mode live \
+            --output output/intelligent_live \
+            --seed "${{ inputs.seed }}"
+
+      - name: Inspect rendered MP4
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s output/intelligent_live/final.mp4
+          test -s output/intelligent_live/metadata.json
+          ffprobe \
+            -v error \
+            -show_entries stream=codec_name,codec_type,width,height,avg_frame_rate \
+            -show_entries format=duration,size \
+            -of json \
+            output/intelligent_live/final.mp4 | tee output/intelligent_live/ffprobe.json
+
+      - name: Upload sanitized live artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: intelligent-live-validation
+          path: |
+            output/intelligent_live/final.mp4
+            output/intelligent_live/metadata.json
+            output/intelligent_live/ffprobe.json
+          if-no-files-found: warn
+          retention-days: 7
