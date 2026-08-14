@@ -18,3 +18,15 @@ services:
         value: /app/output/api
       - key: FACTORY_API_LIGHTWEIGHT_MOCK
         value: "1"
+      - key: FACTORY_DURABLE_STORAGE_REQUIRED
+        value: "1"
+      - key: FACTORY_MEDIA_BUCKET
+        value: tiktok-media
+      - key: SUPABASE_URL
+        value: https://sklzxgdfbclghwfoataq.supabase.co
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: RUNWAY_API_KEY
+        sync: false
