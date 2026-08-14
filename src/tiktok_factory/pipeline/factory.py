@@ -2,6 +2,7 @@ import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from tiktok_factory.domain.models import (
     ContentIdea,
@@ -15,6 +16,7 @@ from tiktok_factory.domain.models import (
     Storyboard,
     StoryboardShot,
     Video,
+    ViralScore,
 )
 from tiktok_factory.pipeline.policies import BudgetPolicy, RetryPolicy, transition
 from tiktok_factory.pipeline.renderer import FFmpegRenderer, probe
@@ -63,9 +65,22 @@ class FactoryPipeline:
         self.technical_reviewer = technical_reviewer
         self.probe_fn = probe_fn
 
-    def run(self, concept: str, output_dir: Path, force: bool = False) -> PipelineResult:
+    def run(
+        self,
+        concept: str,
+        output_dir: Path,
+        force: bool = False,
+        *,
+        idea: ContentIdea | None = None,
+        viral_score: ViralScore | None = None,
+        script_content: tuple[str, str, str] | None = None,
+        prepared_shots: list[StoryboardShot] | None = None,
+        script_id: UUID | None = None,
+        storyboard_id: UUID | None = None,
+        idempotency_key: str | None = None,
+    ) -> PipelineResult:
         output_dir.mkdir(parents=True, exist_ok=True)
-        idea = ContentIdea(concept=concept)
+        idea = idea or ContentIdea(concept=concept)
         state = idea.status
         history = [state]
 
@@ -75,7 +90,7 @@ class FactoryPipeline:
             history.append(state)
 
         score_dimensions = deterministic_dimensions(concept)
-        score = aggregate_scores([
+        score = viral_score or aggregate_scores([
             ("viral_judge_a", score_dimensions),
             ("viral_judge_b", score_dimensions),
             ("novelty_judge", score_dimensions),
@@ -88,14 +103,20 @@ class FactoryPipeline:
             idea.status = state
             raise PipelineRejectedError(f"idea rejected with score {score.total}")
 
+        hook, narration, call_to_action = script_content or (
+            concept,
+            f"Imagine this: {concept}. What happens next?",
+            "Would you enter this world? Comment below.",
+        )
         script = Script(
+            **({"id": script_id} if script_id else {}),
             idea_id=idea.id,
-            hook=concept,
-            narration=f"Imagine this: {concept}. What happens next?",
-            call_to_action="Would you enter this world? Comment below.",
+            hook=hook,
+            narration=narration,
+            call_to_action=call_to_action,
         )
         advance(PipelineState.SCRIPT_CREATED)
-        shots = [
+        shots = prepared_shots or [
             StoryboardShot(number=i, concept=text, caption=text, duration_seconds=1.0)
             for i, text in enumerate((
                 f"The hook — {concept}",
@@ -103,7 +124,9 @@ class FactoryPipeline:
                 "A seamless return to the opening",
             ), 1)
         ]
-        board = Storyboard(script_id=script.id, shots=shots)
+        board = Storyboard(
+            **({"id": storyboard_id} if storyboard_id else {}), script_id=script.id, shots=shots
+        )
         advance(PipelineState.STORYBOARD_CREATED)
         advance(PipelineState.GENERATION_PENDING)
 
@@ -117,12 +140,20 @@ class FactoryPipeline:
 
         while True:
             attempt += 1
+            attempt_estimate = sum(self.provider.estimate_cost(shot) for shot in shots)
+            self.budget.authorize(attempt_estimate, video_spend, self.ledger.daily_spend())
             advance(PipelineState.GENERATING)
             attempt_assets: list[MediaAsset] = []
             for shot in shots:
-                estimate = self.provider.estimated_cost
+                estimate = self.provider.estimate_cost(shot)
                 self.budget.authorize(estimate, video_spend, self.ledger.daily_spend())
+                job_id = (
+                    uuid5(NAMESPACE_URL, f"{idempotency_key}:job:{attempt}:{shot.id}")
+                    if idempotency_key
+                    else uuid4()
+                )
                 job = GenerationJob(
+                    id=job_id,
                     shot_id=shot.id,
                     provider=self.provider.name,
                     model=self.provider.model,
@@ -131,7 +162,8 @@ class FactoryPipeline:
                     status=PipelineState.GENERATING,
                 )
                 path = self.provider.generate(
-                    shot, output_dir / "clips" / f"attempt_{attempt}" / f"shot_{shot.number}.mp4"
+                    shot,
+                    output_dir / "clips" / f"attempt_{attempt}" / f"shot_{shot.number}.mp4",
                 )
                 job.actual_cost = estimate
                 job.status = PipelineState.RENDER_PENDING
@@ -140,17 +172,32 @@ class FactoryPipeline:
                 self.ledger.record(estimate)
                 info = self.probe_fn(path)
                 duration = float(info["format"]["duration"])
-                attempt_assets.append(MediaAsset(job_id=job.id, path=path, duration_seconds=duration))
+                asset_id = (
+                    uuid5(NAMESPACE_URL, f"{idempotency_key}:asset:{attempt}:{shot.id}")
+                    if idempotency_key
+                    else uuid4()
+                )
+                attempt_assets.append(
+                    MediaAsset(id=asset_id, job_id=job.id, path=path, duration_seconds=duration)
+                )
 
             advance(PipelineState.RENDER_PENDING)
             advance(PipelineState.RENDERING)
             final_path = self.renderer.render(
                 [asset.path for asset in attempt_assets], output_dir / "final.mp4", script.hook
             )
-            video = Video(storyboard_id=board.id, path=final_path)
+            video_id = (
+                uuid5(NAMESPACE_URL, f"{idempotency_key}:video:{attempt}")
+                if idempotency_key
+                else uuid4()
+            )
+            video = Video(id=video_id, storyboard_id=board.id, path=final_path)
             advance(PipelineState.QA_PENDING)
             technical = self.technical_reviewer(video, final_path)
             creative = review_creative(video.id, self.creative_qa.evaluate(video, attempt))
+            if idempotency_key:
+                technical.id = uuid5(NAMESPACE_URL, f"{idempotency_key}:qa:technical:{attempt}")
+                creative.id = uuid5(NAMESPACE_URL, f"{idempotency_key}:qa:creative:{attempt}")
             reviews.extend((technical, creative))
             final_assets = attempt_assets
 
@@ -189,5 +236,7 @@ class FactoryPipeline:
             state_history=history,
             metadata_path=metadata_path,
         )
-        metadata_path.write_text(json.dumps(result.model_dump(mode="json"), indent=2), encoding="utf-8")
+        metadata_path.write_text(
+            json.dumps(result.model_dump(mode="json"), indent=2), encoding="utf-8"
+        )
         return result
