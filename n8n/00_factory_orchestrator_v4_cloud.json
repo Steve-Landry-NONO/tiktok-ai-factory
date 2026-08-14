@@ -1,0 +1,64 @@
+{
+  "name": "00_factory_orchestrator_v4_cloud",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "tiktok-factory-v4-cloud",
+        "authentication": "headerAuth",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "v4-cloud-webhook",
+      "name": "V4 Cloud Intake Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR-FACTORY-API.onrender.com/v1/runs",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{JSON.stringify($json.body)}}",
+        "options": {
+          "timeout": 3600000
+        }
+      },
+      "id": "factory-api-cloud",
+      "name": "Run Factory V4 Cloud",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        300,
+        0
+      ],
+      "retryOnFail": false
+    }
+  ],
+  "connections": {
+    "V4 Cloud Intake Webhook": {
+      "main": [
+        [
+          {
+            "node": "Run Factory V4 Cloud",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "00000000-0000-4000-8000-000000000041"
+}
