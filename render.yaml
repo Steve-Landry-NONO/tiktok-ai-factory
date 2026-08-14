@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: tiktok-ai-factory-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /healthz
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: FACTORY_API_TOKEN
+        sync: false
+      - key: FACTORY_API_HOST
+        value: 0.0.0.0
+      - key: FACTORY_API_LOG_LEVEL
+        value: info
+      - key: FACTORY_OUTPUT_ROOT
+        value: /app/output/api
