@@ -7,17 +7,27 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_render_blueprint_keeps_secrets_out_of_git() -> None:
+def test_render_blueprint_declares_secrets_without_values() -> None:
     text = (ROOT / "render.yaml").read_text(encoding="utf-8")
 
     assert "runtime: docker" in text
     assert "healthCheckPath: /healthz" in text
     assert "autoDeployTrigger: checksPass" in text
-    assert "key: FACTORY_API_TOKEN" in text
-    assert "sync: false" in text
-    assert "GROQ_API_KEY" not in text
-    assert "RUNWAY_API_KEY" not in text
-    assert "SUPABASE_SECRET_KEY" not in text
+    assert "region: frankfurt" in text
+    assert "FACTORY_DURABLE_STORAGE_REQUIRED" in text
+    assert "FACTORY_MEDIA_BUCKET" in text
+    assert "value: tiktok-media" in text
+
+    for secret_name in (
+        "FACTORY_API_TOKEN",
+        "GROQ_API_KEY",
+        "RUNWAY_API_KEY",
+        "SUPABASE_SECRET_KEY",
+    ):
+        declaration = f"- key: {secret_name}\n        sync: false"
+        assert declaration in text
+
+    assert "sklzxgdfbclghwfoataq.supabase.co" in text
 
 
 def test_n8n_cloud_workflow_is_authenticated_and_async_at_intake() -> None:
