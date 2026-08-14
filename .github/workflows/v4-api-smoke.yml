@@ -1,0 +1,113 @@
+name: V4 API Smoke
+
+on:
+  push:
+    branches:
+      - feat/v4-n8n-orchestration
+  pull_request:
+    paths:
+      - 'src/tiktok_factory/api/**'
+      - 'src/tiktok_factory/pipeline/**'
+      - 'src/tiktok_factory/providers/**'
+      - 'src/tiktok_factory/storage/**'
+      - 'pyproject.toml'
+      - 'Dockerfile'
+      - '.github/workflows/v4-api-smoke.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      FACTORY_API_TOKEN: smoke-test-token-not-a-secret
+      FACTORY_OUTPUT_ROOT: output/v4_smoke
+      PORT: '8000'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+
+      - name: Install project
+        run: python -m pip install -e '.[dev]'
+
+      - name: Static and unit validation
+        run: |
+          ruff check .
+          mypy
+          pytest -q
+
+      - name: Build Docker image
+        run: docker build -t tiktok-ai-factory:v4-smoke .
+
+      - name: Start Factory API
+        shell: bash
+        run: |
+          set -euo pipefail
+          tiktok-factory-api > /tmp/factory-api.log 2>&1 &
+          echo $! > /tmp/factory-api.pid
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8000/healthz >/tmp/health.json; then
+              cat /tmp/health.json
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/factory-api.log
+          exit 1
+
+      - name: Reject unauthenticated run
+        shell: bash
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -o /tmp/unauth.json -w '%{http_code}' \
+            -X POST http://127.0.0.1:8000/v1/runs \
+            -H 'Content-Type: application/json' \
+            -d '{"idea":"Synthetic smoke idea","correlation_id":"v4-smoke-auth","mode":"mock","video_provider":"synthetic","postprocess":false}')
+          test "$code" = "401"
+          cat /tmp/unauth.json
+
+      - name: Run authenticated mock pipeline
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS \
+            -X POST http://127.0.0.1:8000/v1/runs \
+            -H "Authorization: Bearer ${FACTORY_API_TOKEN}" \
+            -H 'Content-Type: application/json' \
+            -d '{"idea":"A futuristic city where gravity reverses for one minute","correlation_id":"v4-smoke-001","mode":"mock","video_provider":"synthetic","postprocess":false}' \
+            | tee /tmp/run.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path('/tmp/run.json').read_text())
+          assert data['correlation_id'] == 'v4-smoke-001', data
+          assert data['status'] in {'READY_TO_PUBLISH', 'CANDIDATE'}, data
+          final_video = data.get('final_video')
+          assert final_video, data
+          assert Path(final_video).is_file(), final_video
+          assert Path(final_video).stat().st_size > 0, final_video
+          print('Authenticated V4 mock API smoke PASS')
+          PY
+
+      - name: Stop Factory API
+        if: always()
+        run: |
+          if [ -f /tmp/factory-api.pid ]; then
+            kill "$(cat /tmp/factory-api.pid)" || true
+          fi
+          cat /tmp/factory-api.log || true
