@@ -30,12 +30,12 @@ class CreativeProducerOutput(StrictModel):
 class ViralJudgeOutput(StrictModel):
     judge: str
     dimensions: ViralDimensions
-    risk_flags: list[str] = Field(default_factory=list)
+    risk_flags: list[str]
 
 
 class QAAgentOutput(StrictModel):
     scores: CreativeScores
-    diagnostics: list[str] = Field(default_factory=list)
+    diagnostics: list[str]
 
 
 class GrowthAnalystOutput(StrictModel):
