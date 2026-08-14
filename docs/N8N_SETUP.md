@@ -13,7 +13,8 @@ routes are not production contracts.
 The V4 entry point is:
 
 - `POST /v1/runs` on the Factory API.
-- `n8n/00_factory_orchestrator_v4.json` as the first importable workflow.
+- `n8n/00_factory_orchestrator_v4.json` for self-hosted n8n.
+- `n8n/00_factory_orchestrator_v4_cloud.json` for n8n Cloud.
 - `correlation_id` is mandatory and is the idempotency key.
 
 ## Required environment
@@ -28,12 +29,11 @@ Factory API:
 - `RUNWAY_API_KEY` for real video generation.
 - existing provider and budget variables from `.env.example`.
 
-n8n:
+Self-hosted n8n may use environment variables for the API URL/token. For n8n Cloud,
+keep authentication in n8n credentials instead of exporting provider secrets or
+relying on host environment variables.
 
-- `FACTORY_API_URL`: HTTPS URL of the deployed Factory API.
-- `FACTORY_API_TOKEN`: same bearer token, stored as an n8n secret/credential.
-
-Do not export provider secrets into n8n.
+Do not export Groq, Runway or Supabase secrets into n8n.
 
 ## Start the API locally
 
@@ -85,21 +85,33 @@ Apply `supabase/migrations/0004_orchestration_runs.sql` before the first live V4
 
 ## Import the V4 workflow
 
+### Self-hosted n8n
+
 Import `n8n/00_factory_orchestrator_v4.json`.
 
-It exposes a POST webhook and forwards `body` to `/v1/runs` with bearer auth.
-The HTTP Request timeout is intentionally long because V4.0 is synchronous.
-Do not enable blind HTTP retries; idempotency is server-side, but a duplicate
-execution should still be observable.
+It forwards the webhook body to `/v1/runs`. Configure the service URL and token in
+the self-hosted environment or convert the node to an n8n credential.
 
-For n8n versions where `$env` is unavailable, replace the Authorization header
-expression with an n8n Header Auth credential. Verify node `typeVersion` values
-against the deployed n8n version after import.
+### n8n Cloud
+
+Import `n8n/00_factory_orchestrator_v4_cloud.json` and follow
+`docs/RENDER_N8N_CLOUD.md`.
+
+The Cloud workflow deliberately:
+
+- authenticates the incoming webhook,
+- acknowledges the webhook immediately,
+- uses an n8n Bearer Auth credential for the Factory API,
+- disables blind HTTP retries,
+- keeps provider secrets out of n8n.
+
+The HTTP Request timeout remains intentionally long because the Factory API is
+synchronous in V4.1, while the incoming webhook itself responds immediately.
 
 ## Next V4 slices
 
-V4.0 establishes the authenticated, idempotent control plane.
-The following slices should be added only after this API is deployed and smoke-tested:
+V4.0 establishes the authenticated, idempotent control plane. V4.1 adds a safe
+public deployment path and n8n Cloud wiring. The next slices are:
 
 1. Trend intake + deterministic daily correlation IDs.
 2. Approval queue and notification workflow.
