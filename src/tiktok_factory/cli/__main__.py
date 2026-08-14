@@ -7,6 +7,7 @@ from uuid import uuid4
 from tiktok_factory.pipeline.factory import FactoryPipeline
 from tiktok_factory.pipeline.intelligent import IntelligentPipeline, MockIntelligentLLM
 from tiktok_factory.pipeline.policies import BudgetPolicy
+from tiktok_factory.providers.base import VideoGenerationProvider
 from tiktok_factory.providers.groq import GroqProvider
 from tiktok_factory.providers.local import SyntheticVideoProvider
 from tiktok_factory.providers.runway import RunwayProvider
@@ -20,6 +21,7 @@ def build_intelligent_pipeline(mode: str, video_provider: str = "synthetic") -> 
     if video_provider not in ("synthetic", "runway"):
         raise RuntimeError(f"unsupported VIDEO_PROVIDER={video_provider}")
 
+    video: VideoGenerationProvider
     if video_provider == "runway":
         if mode != "live":
             raise RuntimeError("Runway video generation is available only in live mode")
