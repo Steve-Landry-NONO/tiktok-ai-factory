@@ -7,8 +7,8 @@ on:
         description: "Git ref to validate"
         required: true
         default: "codex/construire-v1-pour-tiktok-ai-factory-kzrrmx"
-      seed:
-        description: "TikTok seed used for the live validation"
+      idea:
+        description: "TikTok idea used for the live validation"
         required: true
         default: "A futuristic city where gravity reverses for exactly one minute every midnight"
 
@@ -73,7 +73,8 @@ jobs:
           python -m tiktok_factory.cli intelligent-demo \
             --mode live \
             --output output/intelligent_live \
-            --seed "${{ inputs.seed }}"
+            --idea "${{ inputs.idea }}" \
+            --correlation-id "gha-${{ github.run_id }}-${{ github.run_attempt }}"
 
       - name: Inspect rendered MP4
         shell: bash
