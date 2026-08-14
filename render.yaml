@@ -3,6 +3,7 @@ services:
     name: tiktok-ai-factory-api
     runtime: docker
     plan: free
+    region: frankfurt
     dockerfilePath: ./Dockerfile
     healthCheckPath: /healthz
     autoDeployTrigger: checksPass
