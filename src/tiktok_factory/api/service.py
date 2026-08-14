@@ -15,6 +15,7 @@ from tiktok_factory.providers.groq_tts import (
     ORPHEUS_ENGLISH_MODEL,
     GroqTextToSpeech,
 )
+from tiktok_factory.storage.media import MediaStorage, SupabaseMediaStorage, persist_directory
 from tiktok_factory.storage.supabase import SupabaseRepository
 
 
@@ -46,6 +47,10 @@ class RunResponse(BaseModel):
     final_video: str | None = None
     generation_metadata: str | None = None
     postprocess_metadata: str | None = None
+    storage_objects: list[str] = Field(default_factory=list)
+    final_video_storage_key: str | None = None
+    generation_metadata_storage_key: str | None = None
+    postprocess_metadata_storage_key: str | None = None
 
 
 class OrchestrationRepository(Protocol):
@@ -73,10 +78,12 @@ class FactoryOrchestrationService:
         *,
         runner: Runner | None = None,
         repository: OrchestrationRepository | None = None,
+        media_storage: MediaStorage | None = None,
         output_root: Path | None = None,
     ) -> None:
         self._runner = runner or _run_pipeline
         self._repository = repository
+        self._media_storage = media_storage
         self._output_root = output_root or Path(os.getenv("FACTORY_OUTPUT_ROOT", "output/api"))
 
     def run(self, request: RunRequest) -> RunResponse:
@@ -97,6 +104,9 @@ class FactoryOrchestrationService:
         output_dir = self._output_root / request.correlation_id
         try:
             response = self._runner(request, output_dir)
+            media_storage = self._media_storage or self._media_storage_from_env(request)
+            if media_storage is not None:
+                response = self._persist_outputs(media_storage, output_dir, response)
         except Exception as exc:
             if repository is not None:
                 repository.fail_orchestration_run(request.correlation_id, str(exc)[:500])
@@ -120,6 +130,51 @@ class FactoryOrchestrationService:
                 "live orchestration requires SUPABASE_URL and SUPABASE_SECRET_KEY"
             )
         return SupabaseRepository(url, secret)
+
+    @staticmethod
+    def _media_storage_from_env(request: RunRequest) -> MediaStorage | None:
+        if request.mode != "live" or not _env_flag("FACTORY_DURABLE_STORAGE_REQUIRED"):
+            return None
+        url = os.getenv("SUPABASE_URL")
+        secret = os.getenv("SUPABASE_SECRET_KEY")
+        if not url or not secret:
+            raise RuntimeError(
+                "durable media storage requires SUPABASE_URL and SUPABASE_SECRET_KEY"
+            )
+        return SupabaseMediaStorage(
+            url,
+            secret,
+            bucket=os.getenv("FACTORY_MEDIA_BUCKET", "tiktok-media"),
+        )
+
+    @staticmethod
+    def _persist_outputs(
+        media_storage: MediaStorage,
+        output_dir: Path,
+        response: RunResponse,
+    ) -> RunResponse:
+        prefix = f"runs/{response.correlation_id}"
+        keys = persist_directory(media_storage, output_dir, prefix)
+
+        def storage_key(local_path: str | None) -> str | None:
+            if not local_path:
+                return None
+            path = Path(local_path)
+            try:
+                relative = path.relative_to(output_dir).as_posix()
+            except ValueError:
+                return None
+            candidate = f"{prefix}/{relative}"
+            return candidate if candidate in keys else None
+
+        return response.model_copy(
+            update={
+                "storage_objects": keys,
+                "final_video_storage_key": storage_key(response.final_video),
+                "generation_metadata_storage_key": storage_key(response.generation_metadata),
+                "postprocess_metadata_storage_key": storage_key(response.postprocess_metadata),
+            }
+        )
 
     @staticmethod
     def _response_from_existing(
