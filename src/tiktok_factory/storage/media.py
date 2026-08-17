@@ -114,9 +114,10 @@ class SupabaseMediaStorage:
         destination.parent.mkdir(parents=True, exist_ok=True)
         with self.client.stream("GET", url, headers=self._auth_headers()) as response:
             if response.status_code != 200:
+                error_body = response.read().decode("utf-8", errors="replace")
                 raise RuntimeError(
                     f"Supabase Storage download failed: HTTP {response.status_code} "
-                    f"{response.text[:300]}"
+                    f"{error_body[:300]}"
                 )
             with destination.open("wb") as handle:
                 for chunk in response.iter_bytes():
