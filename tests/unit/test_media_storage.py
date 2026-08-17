@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import httpx
+import pytest
 
 from tiktok_factory.storage.media import LocalMediaStorage, SupabaseMediaStorage, persist_directory
 
@@ -63,6 +64,24 @@ def test_supabase_media_storage_materializes_private_object(tmp_path: Path) -> N
 
     assert result == destination
     assert destination.read_bytes() == b"persisted-video"
+
+
+def test_supabase_media_storage_preserves_private_download_error(tmp_path: Path) -> None:
+    destination = tmp_path / "missing.mp4"
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, content=b'{"message":"Object not found"}')
+
+    storage = SupabaseMediaStorage(
+        "https://project.supabase.co",
+        "secret-value",
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    with pytest.raises(RuntimeError, match="HTTP 404.*Object not found"):
+        storage.materialize("runs/test/missing.mp4", destination)
+
+    assert not destination.exists()
 
 
 def test_persist_directory_uploads_supported_files_only(tmp_path: Path) -> None:
